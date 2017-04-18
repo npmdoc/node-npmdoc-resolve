@@ -63,6 +63,24 @@
 
         <li>
 
+            <a class="apidocElementLiA" href="#apidoc.element.resolve.resolve">
+            function <span class="apidocSignatureSpan"></span>resolve
+            <span class="apidocSignatureSpan">(x, options, callback)</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.resolve.async">
+            function <span class="apidocSignatureSpan">resolve.</span>async
+            <span class="apidocSignatureSpan">(x, options, callback)</span>
+            </a>
+
+        </li>
+
+        <li>
+
             <a class="apidocElementLiA" href="#apidoc.element.resolve.isCore">
             function <span class="apidocSignatureSpan">resolve.</span>isCore
             <span class="apidocSignatureSpan">(x)</span>
@@ -87,10 +105,335 @@
 
     </ol></li>
 
+    <li class="apidocModuleLi"><a href="#apidoc.module.resolve.async">module resolve.async</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.resolve.async.async">
+            function <span class="apidocSignatureSpan">resolve.</span>async
+            <span class="apidocSignatureSpan">(x, options, callback)</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.resolve.async.isCore">
+            function <span class="apidocSignatureSpan">resolve.async.</span>isCore
+            <span class="apidocSignatureSpan">(x)</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.resolve.async.sync">
+            function <span class="apidocSignatureSpan">resolve.async.</span>sync
+            <span class="apidocSignatureSpan">(x, options)</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <span class="apidocSignatureSpan">object <span class="apidocSignatureSpan">resolve.async.</span>core</span>
+
+        </li>
+
+    </ol></li>
+
 </ol></div>
 
 <div class="apidocSectionDiv">
 <h1><a href="#apidoc.module.resolve" id="apidoc.module.resolve">module resolve</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.resolve.resolve" id="apidoc.element.resolve.resolve">
+        function <span class="apidocSignatureSpan"></span>resolve
+        <span class="apidocSignatureSpan">(x, options, callback)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function resolve(x, options, callback) {
+    var cb = callback;
+    var opts = options || {};
+    if (typeof opts === &#x27;function&#x27;) {
+        cb = opts;
+        opts = {};
+    }
+    if (typeof x !== &#x27;string&#x27;) {
+        var err = new TypeError(&#x27;path must be a string&#x27;);
+        return process.nextTick(function () {
+            cb(err);
+        });
+    }
+
+    var isFile = opts.isFile || function (file, cb) {
+        fs.stat(file, function (err, stat) {
+            if (err &#x26;&#x26; err.code === &#x27;ENOENT&#x27;) cb(null, false);
+            else if (err) cb(err);
+            else cb(null, stat.isFile() || stat.isFIFO());
+        });
+    };
+    var readFile = opts.readFile || fs.readFile;
+
+    var extensions = opts.extensions || [&#x27;.js&#x27;];
+    var y = opts.basedir || path.dirname(caller());
+
+    opts.paths = opts.paths || [];
+
+    if (/^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\\/])/.test(x)) {
+        var res = path.resolve(y, x);
+        if (x === &#x27;..&#x27;) res += &#x27;/&#x27;;
+        if (/\/$/.test(x) &#x26;&#x26; res === y) {
+            loadAsDirectory(res, opts.package, onfile);
+        } else loadAsFile(res, opts.package, onfile);
+    } else loadNodeModules(x, y, function (err, n, pkg) {
+        if (err) cb(err);
+        else if (n) cb(null, n, pkg);
+        else if (core[x]) return cb(null, x);
+        else {
+            var moduleError = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+            moduleError.code = &#x27;MODULE_NOT_FOUND&#x27;;
+            cb(moduleError);
+        }
+    });
+
+    function onfile(err, m, pkg) {
+        if (err) cb(err);
+        else if (m) cb(null, m, pkg);
+        else loadAsDirectory(res, function (err, d, pkg) {
+            if (err) cb(err);
+            else if (d) cb(null, d, pkg);
+            else {
+                var moduleError = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+                moduleError.code = &#x27;MODULE_NOT_FOUND&#x27;;
+                cb(moduleError);
+            }
+        });
+    }
+
+    function loadAsFile(x, pkg, callback) {
+        var cb = callback;
+        if (typeof pkg === &#x27;function&#x27;) {
+            cb = pkg;
+            pkg = undefined;
+        }
+
+        var exts = [&#x27;&#x27;].concat(extensions);
+        load(exts, x, pkg);
+
+        function load(exts, x, pkg) {
+            if (exts.length === 0) return cb(null, undefined, pkg);
+            var file = x + exts[0];
+
+            if (pkg) onpkg(null, pkg);
+            else loadpkg(path.dirname(file), onpkg);
+
+            function onpkg(err, pkg_, dir) {
+                pkg = pkg_;
+                if (err) return cb(err);
+                if (dir &#x26;&#x26; pkg &#x26;&#x26; opts.pathFilter) {
+                    var rfile = path.relative(dir, file);
+                    var rel = rfile.slice(0, rfile.length - exts[0].length);
+                    var r = opts.pathFilter(pkg, x, rel);
+                    if (r) return load(
+                        [&#x27;&#x27;].concat(extensions.slice()),
+                        path.resolve(dir, r),
+                        pkg
+                    );
+                }
+                isFile(file, onex);
+            }
+            function onex(err, ex) {
+                if (err) cb(err);
+                else if (!ex) load(exts.slice(1), x, pkg);
+                else cb(null, file, pkg);
+            }
+        }
+    }
+
+    function loadpkg(dir, cb) {
+        if (dir === &#x27;&#x27; || dir === &#x27;/&#x27;) return cb(null);
+        if (process.platform === &#x27;win32&#x27; &#x26;&#x26; (/^\w:[\\\/]*$/).test(dir)) {
+            return cb(null);
+        }
+        if (/[\\\/]node_modules[\\\/]*$/.test(dir)) return cb(null);
+
+        var pkgfile = path.join(dir, &#x27;package.json&#x27;);
+        isFile(pkgfile, function (err, ex) {
+            // on err, ex is false
+            if (!ex) return loadpkg(path.dirname(dir), cb);
+
+            readFile(pkgfile, function (err, body) {
+                if (err) cb(err);
+                try { var pkg = JSON.parse(body); } catch (jsonErr) {}
+
+                if (pkg &#x26;&#x26; opts.packageFilter) {
+                    pkg = opts.packageFilter(pkg, pkgfile);
+                }
+                cb(null, pkg, dir);
+            });
+        });
+    }
+
+    function loadAsDi ...</pre></li>
+    <li>example usage<pre class="apidocCodePre">...
+
+
+
+
+
+# resolve
+
+implements the [node `require.<span class="apidocCodeKeywordSpan">resolve</span>()`
+algorithm](https://nodejs.org/api/modules.html#modules_all_together)
+such that you can `require.resolve()` on behalf of a file asynchronously and
+synchronously
+
+[![build status](https://secure.travis-ci.org/substack/node-resolve.png)](http://travis-ci.org/substack/node-resolve)
+
+# example
+...</pre></li>
+    </ul>
+
+
+
+    <h2>
+        <a href="#apidoc.element.resolve.async" id="apidoc.element.resolve.async">
+        function <span class="apidocSignatureSpan">resolve.</span>async
+        <span class="apidocSignatureSpan">(x, options, callback)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function resolve(x, options, callback) {
+    var cb = callback;
+    var opts = options || {};
+    if (typeof opts === &#x27;function&#x27;) {
+        cb = opts;
+        opts = {};
+    }
+    if (typeof x !== &#x27;string&#x27;) {
+        var err = new TypeError(&#x27;path must be a string&#x27;);
+        return process.nextTick(function () {
+            cb(err);
+        });
+    }
+
+    var isFile = opts.isFile || function (file, cb) {
+        fs.stat(file, function (err, stat) {
+            if (err &#x26;&#x26; err.code === &#x27;ENOENT&#x27;) cb(null, false);
+            else if (err) cb(err);
+            else cb(null, stat.isFile() || stat.isFIFO());
+        });
+    };
+    var readFile = opts.readFile || fs.readFile;
+
+    var extensions = opts.extensions || [&#x27;.js&#x27;];
+    var y = opts.basedir || path.dirname(caller());
+
+    opts.paths = opts.paths || [];
+
+    if (/^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\\/])/.test(x)) {
+        var res = path.resolve(y, x);
+        if (x === &#x27;..&#x27;) res += &#x27;/&#x27;;
+        if (/\/$/.test(x) &#x26;&#x26; res === y) {
+            loadAsDirectory(res, opts.package, onfile);
+        } else loadAsFile(res, opts.package, onfile);
+    } else loadNodeModules(x, y, function (err, n, pkg) {
+        if (err) cb(err);
+        else if (n) cb(null, n, pkg);
+        else if (core[x]) return cb(null, x);
+        else {
+            var moduleError = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+            moduleError.code = &#x27;MODULE_NOT_FOUND&#x27;;
+            cb(moduleError);
+        }
+    });
+
+    function onfile(err, m, pkg) {
+        if (err) cb(err);
+        else if (m) cb(null, m, pkg);
+        else loadAsDirectory(res, function (err, d, pkg) {
+            if (err) cb(err);
+            else if (d) cb(null, d, pkg);
+            else {
+                var moduleError = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+                moduleError.code = &#x27;MODULE_NOT_FOUND&#x27;;
+                cb(moduleError);
+            }
+        });
+    }
+
+    function loadAsFile(x, pkg, callback) {
+        var cb = callback;
+        if (typeof pkg === &#x27;function&#x27;) {
+            cb = pkg;
+            pkg = undefined;
+        }
+
+        var exts = [&#x27;&#x27;].concat(extensions);
+        load(exts, x, pkg);
+
+        function load(exts, x, pkg) {
+            if (exts.length === 0) return cb(null, undefined, pkg);
+            var file = x + exts[0];
+
+            if (pkg) onpkg(null, pkg);
+            else loadpkg(path.dirname(file), onpkg);
+
+            function onpkg(err, pkg_, dir) {
+                pkg = pkg_;
+                if (err) return cb(err);
+                if (dir &#x26;&#x26; pkg &#x26;&#x26; opts.pathFilter) {
+                    var rfile = path.relative(dir, file);
+                    var rel = rfile.slice(0, rfile.length - exts[0].length);
+                    var r = opts.pathFilter(pkg, x, rel);
+                    if (r) return load(
+                        [&#x27;&#x27;].concat(extensions.slice()),
+                        path.resolve(dir, r),
+                        pkg
+                    );
+                }
+                isFile(file, onex);
+            }
+            function onex(err, ex) {
+                if (err) cb(err);
+                else if (!ex) load(exts.slice(1), x, pkg);
+                else cb(null, file, pkg);
+            }
+        }
+    }
+
+    function loadpkg(dir, cb) {
+        if (dir === &#x27;&#x27; || dir === &#x27;/&#x27;) return cb(null);
+        if (process.platform === &#x27;win32&#x27; &#x26;&#x26; (/^\w:[\\\/]*$/).test(dir)) {
+            return cb(null);
+        }
+        if (/[\\\/]node_modules[\\\/]*$/.test(dir)) return cb(null);
+
+        var pkgfile = path.join(dir, &#x27;package.json&#x27;);
+        isFile(pkgfile, function (err, ex) {
+            // on err, ex is false
+            if (!ex) return loadpkg(path.dirname(dir), cb);
+
+            readFile(pkgfile, function (err, body) {
+                if (err) cb(err);
+                try { var pkg = JSON.parse(body); } catch (jsonErr) {}
+
+                if (pkg &#x26;&#x26; opts.packageFilter) {
+                    pkg = opts.packageFilter(pkg, pkgfile);
+                }
+                cb(null, pkg, dir);
+            });
+        });
+    }
+
+    function loadAsDi ...</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
 
 
     <h2>
@@ -124,6 +467,285 @@ With [npm](https://npmjs.org) do:
     <h2>
         <a href="#apidoc.element.resolve.sync" id="apidoc.element.resolve.sync">
         function <span class="apidocSignatureSpan">resolve.</span>sync
+        <span class="apidocSignatureSpan">(x, options)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">sync = function (x, options) {
+    var opts = options || {};
+    var isFile = opts.isFile || function (file) {
+        try {
+            var stat = fs.statSync(file);
+        } catch (e) {
+            if (e &#x26;&#x26; e.code === &#x27;ENOENT&#x27;) return false;
+            throw e;
+        }
+        return stat.isFile() || stat.isFIFO();
+    };
+    var readFileSync = opts.readFileSync || fs.readFileSync;
+
+    var extensions = opts.extensions || [&#x27;.js&#x27;];
+    var y = opts.basedir || path.dirname(caller());
+
+    opts.paths = opts.paths || [];
+
+    if (/^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\\/])/.test(x)) {
+        var res = path.resolve(y, x);
+        if (x === &#x27;..&#x27;) res += &#x27;/&#x27;;
+        var m = loadAsFileSync(res) || loadAsDirectorySync(res);
+        if (m) return m;
+    } else {
+        var n = loadNodeModulesSync(x, y);
+        if (n) return n;
+    }
+
+    if (core[x]) return x;
+
+    var err = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+    err.code = &#x27;MODULE_NOT_FOUND&#x27;;
+    throw err;
+
+    function loadAsFileSync(x) {
+        if (isFile(x)) {
+            return x;
+        }
+
+        for (var i = 0; i &#x3c; extensions.length; i++) {
+            var file = x + extensions[i];
+            if (isFile(file)) {
+                return file;
+            }
+        }
+    }
+
+    function loadAsDirectorySync(x) {
+        var pkgfile = path.join(x, &#x27;/package.json&#x27;);
+        if (isFile(pkgfile)) {
+            var body = readFileSync(pkgfile, &#x27;utf8&#x27;);
+            try {
+                var pkg = JSON.parse(body);
+                if (opts.packageFilter) {
+                    pkg = opts.packageFilter(pkg, x);
+                }
+
+                if (pkg.main) {
+                    var m = loadAsFileSync(path.resolve(x, pkg.main));
+                    if (m) return m;
+                    var n = loadAsDirectorySync(path.resolve(x, pkg.main));
+                    if (n) return n;
+                }
+            } catch (e) {}
+        }
+
+        return loadAsFileSync(path.join(x, &#x27;/index&#x27;));
+    }
+
+    function loadNodeModulesSync(x, start) {
+        var dirs = nodeModulesPaths(start, opts);
+        for (var i = 0; i &#x3c; dirs.length; i++) {
+            var dir = dirs[i];
+            var m = loadAsFileSync(path.join(dir, &#x27;/&#x27;, x));
+            if (m) return m;
+            var n = loadAsDirectorySync(path.join(dir, &#x27;/&#x27;, x));
+            if (n) return n;
+        }
+    }
+}</pre></li>
+    <li>example usage<pre class="apidocCodePre">...
+/home/substack/projects/node-resolve/node_modules/tap/lib/main.js
+```
+
+synchronously resolve:
+
+``` js
+var resolve = require(&#x27;resolve&#x27;);
+var res = resolve.<span class="apidocCodeKeywordSpan">sync</span>(&#x27;tap&#x27;, { basedir: __dirname });
+console.log(res);
+```
+
+```
+$ node example/sync.js
+/home/substack/projects/node-resolve/node_modules/tap/lib/main.js
+```
+...</pre></li>
+    </ul>
+
+
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.resolve.async" id="apidoc.module.resolve.async">module resolve.async</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.resolve.async.async" id="apidoc.element.resolve.async.async">
+        function <span class="apidocSignatureSpan">resolve.</span>async
+        <span class="apidocSignatureSpan">(x, options, callback)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function resolve(x, options, callback) {
+    var cb = callback;
+    var opts = options || {};
+    if (typeof opts === &#x27;function&#x27;) {
+        cb = opts;
+        opts = {};
+    }
+    if (typeof x !== &#x27;string&#x27;) {
+        var err = new TypeError(&#x27;path must be a string&#x27;);
+        return process.nextTick(function () {
+            cb(err);
+        });
+    }
+
+    var isFile = opts.isFile || function (file, cb) {
+        fs.stat(file, function (err, stat) {
+            if (err &#x26;&#x26; err.code === &#x27;ENOENT&#x27;) cb(null, false);
+            else if (err) cb(err);
+            else cb(null, stat.isFile() || stat.isFIFO());
+        });
+    };
+    var readFile = opts.readFile || fs.readFile;
+
+    var extensions = opts.extensions || [&#x27;.js&#x27;];
+    var y = opts.basedir || path.dirname(caller());
+
+    opts.paths = opts.paths || [];
+
+    if (/^(?:\.\.?(?:\/|$)|\/|([A-Za-z]:)?[\\\/])/.test(x)) {
+        var res = path.resolve(y, x);
+        if (x === &#x27;..&#x27;) res += &#x27;/&#x27;;
+        if (/\/$/.test(x) &#x26;&#x26; res === y) {
+            loadAsDirectory(res, opts.package, onfile);
+        } else loadAsFile(res, opts.package, onfile);
+    } else loadNodeModules(x, y, function (err, n, pkg) {
+        if (err) cb(err);
+        else if (n) cb(null, n, pkg);
+        else if (core[x]) return cb(null, x);
+        else {
+            var moduleError = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+            moduleError.code = &#x27;MODULE_NOT_FOUND&#x27;;
+            cb(moduleError);
+        }
+    });
+
+    function onfile(err, m, pkg) {
+        if (err) cb(err);
+        else if (m) cb(null, m, pkg);
+        else loadAsDirectory(res, function (err, d, pkg) {
+            if (err) cb(err);
+            else if (d) cb(null, d, pkg);
+            else {
+                var moduleError = new Error(&#x22;Cannot find module &#x27;&#x22; + x + &#x22;&#x27; from &#x27;&#x22; + y + &#x22;&#x27;&#x22;);
+                moduleError.code = &#x27;MODULE_NOT_FOUND&#x27;;
+                cb(moduleError);
+            }
+        });
+    }
+
+    function loadAsFile(x, pkg, callback) {
+        var cb = callback;
+        if (typeof pkg === &#x27;function&#x27;) {
+            cb = pkg;
+            pkg = undefined;
+        }
+
+        var exts = [&#x27;&#x27;].concat(extensions);
+        load(exts, x, pkg);
+
+        function load(exts, x, pkg) {
+            if (exts.length === 0) return cb(null, undefined, pkg);
+            var file = x + exts[0];
+
+            if (pkg) onpkg(null, pkg);
+            else loadpkg(path.dirname(file), onpkg);
+
+            function onpkg(err, pkg_, dir) {
+                pkg = pkg_;
+                if (err) return cb(err);
+                if (dir &#x26;&#x26; pkg &#x26;&#x26; opts.pathFilter) {
+                    var rfile = path.relative(dir, file);
+                    var rel = rfile.slice(0, rfile.length - exts[0].length);
+                    var r = opts.pathFilter(pkg, x, rel);
+                    if (r) return load(
+                        [&#x27;&#x27;].concat(extensions.slice()),
+                        path.resolve(dir, r),
+                        pkg
+                    );
+                }
+                isFile(file, onex);
+            }
+            function onex(err, ex) {
+                if (err) cb(err);
+                else if (!ex) load(exts.slice(1), x, pkg);
+                else cb(null, file, pkg);
+            }
+        }
+    }
+
+    function loadpkg(dir, cb) {
+        if (dir === &#x27;&#x27; || dir === &#x27;/&#x27;) return cb(null);
+        if (process.platform === &#x27;win32&#x27; &#x26;&#x26; (/^\w:[\\\/]*$/).test(dir)) {
+            return cb(null);
+        }
+        if (/[\\\/]node_modules[\\\/]*$/.test(dir)) return cb(null);
+
+        var pkgfile = path.join(dir, &#x27;package.json&#x27;);
+        isFile(pkgfile, function (err, ex) {
+            // on err, ex is false
+            if (!ex) return loadpkg(path.dirname(dir), cb);
+
+            readFile(pkgfile, function (err, body) {
+                if (err) cb(err);
+                try { var pkg = JSON.parse(body); } catch (jsonErr) {}
+
+                if (pkg &#x26;&#x26; opts.packageFilter) {
+                    pkg = opts.packageFilter(pkg, pkgfile);
+                }
+                cb(null, pkg, dir);
+            });
+        });
+    }
+
+    function loadAsDi ...</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+
+    <h2>
+        <a href="#apidoc.element.resolve.async.isCore" id="apidoc.element.resolve.async.isCore">
+        function <span class="apidocSignatureSpan">resolve.async.</span>isCore
+        <span class="apidocSignatureSpan">(x)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function isCore(x) { return core[x]; }</pre></li>
+    <li>example usage<pre class="apidocCodePre">...
+        try { return fs.statSync(file).isFile() }
+        catch (e) { return false }
+    },
+    moduleDirectory: &#x27;node_modules&#x27;
+}
+````
+
+## resolve.<span class="apidocCodeKeywordSpan">isCore</span>(pkg)
+
+Return whether a package is in core.
+
+# install
+
+With [npm](https://npmjs.org) do:
+...</pre></li>
+    </ul>
+
+
+
+    <h2>
+        <a href="#apidoc.element.resolve.async.sync" id="apidoc.element.resolve.async.sync">
+        function <span class="apidocSignatureSpan">resolve.async.</span>sync
         <span class="apidocSignatureSpan">(x, options)</span>
         </a>
     </h2>
